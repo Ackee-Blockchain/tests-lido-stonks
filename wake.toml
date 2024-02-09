@@ -1,0 +1,3 @@
+[compiler.solc]
+include_paths = ["source/node_modules"]
+exclude_paths = ["source/node_modules"]
