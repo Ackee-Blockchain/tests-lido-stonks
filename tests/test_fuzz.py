@@ -169,7 +169,7 @@ class StonksTest(FuzzTest):
         buy_token = random.choice(list({DAI, USDT, USDC} - {sell_token}))
         sell_decimals = IERC20Metadata(sell_token).decimals()
         buy_decimals = IERC20Metadata(buy_token).decimals()
-        sell_amount = random_int(1, 10_000 * sell_decimals)
+        sell_amount = random_int(1, 10_000 * 10 ** sell_decimals)
         aggregator = self.chainlink_aggregators[(sell_token, USD_DENOMINATION)]
 
         with default_chain.snapshot_and_revert():
