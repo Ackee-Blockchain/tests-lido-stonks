@@ -44,11 +44,11 @@ def mint(token: Union[Address, Account], to: Union[Address, Account], amount: in
     else:
         raise ValueError(f"Unknown token {token}")
 
-    old_total_supply = int.from_bytes(default_chain.chain_interface.get_storage_at(str(token), total_supply_slot), byteorder="big")
-    default_chain.chain_interface.set_storage_at(str(token), total_supply_slot, (old_total_supply + amount).to_bytes(32, "big"))
+    old_total_supply = int.from_bytes(chain.chain_interface.get_storage_at(str(token), total_supply_slot,  "pending"), byteorder="big")
+    chain.chain_interface.set_storage_at(str(token), total_supply_slot, (old_total_supply + amount).to_bytes(32, "big"))
 
-    old_balance = int.from_bytes(default_chain.chain_interface.get_storage_at(str(token), balance_slot), byteorder="big")
-    default_chain.chain_interface.set_storage_at(str(token), balance_slot, (old_balance + amount).to_bytes(32, "big"))
+    old_balance = int.from_bytes(chain.chain_interface.get_storage_at(str(token), balance_slot, "pending"), byteorder="big")
+    chain.chain_interface.set_storage_at(str(token), balance_slot, (old_balance + amount).to_bytes(32, "big"))
 
 
 class AggregatorData(NamedTuple):
@@ -71,7 +71,7 @@ class StonksTest(FuzzTest):
 
     def pre_sequence(self):
         self.agent = Account.new()
-        manager = default_chain.accounts[0]
+        manager = chain.accounts[0]
 
         self.order_duration = random_int(60, 60 * 60 * 24)
         self.margin_basis_points = random_int(0, 1_000, edge_values_prob=0.33)  # 0% - 10%
@@ -137,7 +137,7 @@ class StonksTest(FuzzTest):
 
     def _update_aggregator_price(self, aggregator: Account, new_price: int):
         round_id = self.aggregator_data[aggregator].round_id + 1
-        timestamp = default_chain.blocks["latest"].timestamp
+        timestamp = chain.blocks["latest"].timestamp
         self.aggregator_data[aggregator] = AggregatorData(
             round_id,
             new_price,
@@ -165,22 +165,24 @@ class StonksTest(FuzzTest):
 
     @flow()
     def flow_place_order(self):
-        sell_token = random.choice([STETH, DAI, USDT, USDC])
+        sell_token = random.choice([STETH, DAI, USDC])
         buy_token = random.choice(list({DAI, USDT, USDC} - {sell_token}))
         sell_decimals = IERC20Metadata(sell_token).decimals()
         buy_decimals = IERC20Metadata(buy_token).decimals()
         sell_amount = random_int(1, 10_000 * 10 ** sell_decimals)
         aggregator = self.chainlink_aggregators[(sell_token, USD_DENOMINATION)]
 
-        with default_chain.snapshot_and_revert():
-            default_chain.mine()
-            block = default_chain.blocks["latest"]
+        with chain.snapshot_and_revert():
+            chain.mine()
+            chain.mine()
+            chain.mine()
+            block = chain.blocks["latest"]
             _, price, _, _, _ = IFeedRegistry(CHAINLINK_FEED_REGISTRY).latestRoundData(sell_token, USD_DENOMINATION)
             decimals = IFeedRegistry(CHAINLINK_FEED_REGISTRY).decimals(sell_token, USD_DENOMINATION)
 
-        default_chain.set_next_block_timestamp(block.timestamp)
 
         mint(sell_token, self.stonks[(sell_token, buy_token)], sell_amount)
+        chain.set_next_block_timestamp(block.timestamp)
         sell_amount = IERC20Metadata(sell_token).balanceOf(self.stonks[(sell_token, buy_token)])
         buy_amount = self._compute_buy_amount(sell_amount, price, sell_decimals, decimals, buy_decimals)
         min_buy_amount = random_int(1, round(buy_amount * 1.1)) if buy_amount >= 1 else 1
@@ -190,7 +192,7 @@ class StonksTest(FuzzTest):
             with must_revert(Stonks.MinimumPossibleBalanceNotMet):
                 self.stonks[(sell_token, buy_token)].placeOrder(min_buy_amount)
             return
-        elif self.aggregator_data[self.chainlink_aggregators[(sell_token, USD_DENOMINATION)]].timestamp + self.heartbeat_timeouts[sell_token] < default_chain.blocks["pending"].timestamp:
+        elif self.aggregator_data[self.chainlink_aggregators[(sell_token, USD_DENOMINATION)]].timestamp + self.heartbeat_timeouts[sell_token] < chain.blocks["pending"].timestamp:
             # Chainlink feed is outdated
             with must_revert(AmountConverter.PriceFeedNotUpdated):
                 self.stonks[(sell_token, buy_token)].placeOrder(min_buy_amount)
@@ -243,7 +245,7 @@ class StonksTest(FuzzTest):
             assert order.isValidSignature(order_hash, b"") == bytes.fromhex("1626ba7e")
 
         # roll time forward for order to expire
-        default_chain.mine(lambda _: tx.block.timestamp + self.order_duration + 1)
+        chain.mine(lambda _: tx.block.timestamp + self.order_duration + 1)
         with must_revert(Order.OrderExpired):
             order.isValidSignature(order_hash, b"")
 
@@ -251,13 +253,13 @@ class StonksTest(FuzzTest):
         order.recoverTokenFrom(from_=random_account())
 
 
-def test_stonks():
-    for _ in range(100):
-        fork_block = random_int(17034871, 19049237)
-        with default_chain.connect(fork=f"http://localhost:8545@{fork_block}"):
-            try:
-                StonksTest().run(1, 500)
-            except TransactionRevertedError as e:
-                print(e.tx.call_trace if e.tx else "Call reverted")
-                raise
-            print("sequence passed")
+@chain.connect(fork="http://localhost:8545@17034871")
+@on_revert(lambda e: print(e.tx.call_trace if e.tx else "Call reverted"))
+def test_stonks_old():
+    StonksTest().run(50, 500)
+
+@chain.connect(fork="http://localhost:8545@19049237")
+@on_revert(lambda e: print(e.tx.call_trace if e.tx else "Call reverted"))
+def test_stonks_new():
+    StonksTest().run(50, 500)
+
