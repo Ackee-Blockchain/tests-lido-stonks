@@ -1,4 +1,4 @@
-# Tests for Lido Stonks
+# Tests for Lido Stonks 2.0
 This repository serves as an example of tests written in a development and testing framework called [Wake](https://github.com/Ackee-Blockchain/wake).
 
 ![horizontal splitter](https://github.com/Ackee-Blockchain/wake-detect-action/assets/56036748/ec488c85-2f7f-4433-ae58-3d50698a47de)
@@ -11,4 +11,4 @@ This repository serves as an example of tests written in a development and testi
 4. `wake up pytypes` to generate pytypes
 5. `wake test` to run tests
 
-Tested with `wake` version `4.4.1` and `anvil` version `0.2.0 (0688b5a 2024-02-06T00:16:34.878992291Z)`. The fuzz test expects a local archive node running at http://localhost:8545 with the Ethereum mainnet with blocks from 17034871 to 19049237 available.
+Tested with `wake` version `5.0.0rc2`. The fuzz test expects a local node running at http://localhost:8545 with the Ethereum mainnet synchronized to the block 23819940.
