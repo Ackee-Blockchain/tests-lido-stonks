@@ -1,6 +1,12 @@
 [compiler.solc]
 include_paths = ["source/node_modules"]
 exclude_paths = ["source/node_modules"]
+target_version = "0.8.23"
+evm_version = "paris"
+
+[compiler.solc.optimizer]
+enabled = true
+runs = 200
 
 [testing]
 cmd = "revm"
